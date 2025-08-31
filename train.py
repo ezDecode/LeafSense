@@ -67,7 +67,7 @@ class LeafSenseTrainer:
         # Only rescaling for validation and test
         val_test_datagen = ImageDataGenerator(rescale=1./255)
         
-        # Training generator
+        # for Training 
         self.train_generator = train_datagen.flow_from_directory(
             os.path.join(self.data_dir, 'train'),
             target_size=self.img_size,
@@ -76,7 +76,7 @@ class LeafSenseTrainer:
             shuffle=True
         )
         
-        # Validation generator
+        # for  Validation 
         self.val_generator = val_test_datagen.flow_from_directory(
             os.path.join(self.data_dir, 'val'),
             target_size=self.img_size,
