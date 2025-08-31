@@ -1,0 +1,196 @@
+# =========================================
+# Cursor AI Project Instruction File
+# Project: Crop Leaf Disease Detection System
+# =========================================
+
+project_title: "Crop Leaf Disease Detection"
+
+goal: |
+  Build a full-stack AI-powered system to detect crop leaf diseases.
+  The system should:
+  1. Accept a crop leaf image upload from user.
+  2. Predict disease using a locally trained deep learning model.
+  3. Also call PlantVillage API for prediction and metadata.
+  4. Merge both predictions.
+  5. Use Gemini API to phrase a final farmer-friendly explanation.
+  6. Display results on a responsive web interface.
+
+---
+
+# =======================
+# Step 1: Dataset & Model
+# =======================
+dataset:
+  name: "PlantVillage"
+  source: "Kaggle or public repo"
+  split: 
+    train: 70%
+    validation: 15%
+    test: 15%
+  preprocessing:
+    resize: "224x224 pixels"
+    normalize: "[0, 1]"
+    augmentations:
+      - rotation: ±30
+      - flips: horizontal/vertical
+      - zoom: 0.2
+      - brightness_contrast: true
+
+model:
+  type: "Transfer Learning"
+  base: "ResNet50 (pretrained on ImageNet)"
+  layers:
+    - Dense(512, activation=ReLU)
+    - Dropout(0.3)
+    - Dense(38, activation=Softmax)
+  training:
+    loss: categorical_crossentropy
+    optimizer: Adam(lr=0.0001)
+    batch_size: 32
+    epochs: 20-30
+    early_stopping: true
+  output:
+    model_file: "saved_models/best_model.h5"
+    class_mapping: "saved_models/class_indices.json"
+
+---
+
+# ===================
+# Step 2: Evaluation
+# ===================
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+  confusion_matrix: true
+  target_accuracy: ">= 90%"
+
+---
+
+# ============================
+# Step 3: Backend (Flask API)
+# ============================
+backend:
+  framework: "Flask"
+  endpoints:
+    - name: "/predict"
+      method: POST
+      input: "Leaf image (JPG/PNG ≤10MB)"
+      process:
+        1: "Preprocess image"
+        2: "Run local model inference (best_model.h5)"
+        3: "Send image to PlantVillage API for disease prediction"
+        4: "Merge model and API predictions"
+        5: "Send merged data to Gemini API for phrasing"
+        6: "Return final enhanced response"
+      output_example:
+        {
+          "model_prediction": {"disease": "Tomato___Late_blight", "confidence": 0.94},
+          "api_prediction": {"disease": "Tomato Late Blight", "confidence": 0.92},
+          "gemini_response": "The leaf shows signs of Tomato Late Blight, a fungal disease. Remove infected leaves, rotate crops, and apply fungicide early."
+        }
+
+---
+
+# ========================
+# Step 4: Knowledge Base
+# ========================
+knowledge_base:
+  file: "diseases.json"
+  format: JSON
+  example:
+    Tomato___Late_blight:
+      description: "Fungal disease caused by Phytophthora infestans."
+      remedy: "Remove infected leaves, rotate crops, apply copper fungicide."
+    Tomato___Early_blight:
+      description: "Caused by Alternaria solani."
+      remedy: "Use resistant seeds, avoid overhead irrigation."
+
+---
+
+# ==========================
+# Step 5: External Services
+# ==========================
+external_services:
+  - PlantVillage API:
+      purpose: "Get external disease prediction + metadata"
+      usage: "Send uploaded image for classification"
+  - Gemini API:
+      purpose: "Enhance and phrase the merged results in user-friendly language"
+      prompt_template: |
+        You are an agricultural assistant.
+        Based on these predictions:
+        - Local Model: {model_prediction}
+        - API: {api_prediction}
+        - Remedies: {remedies}
+        Task: Phrase a clear, farmer-friendly response with:
+        1. Disease name
+        2. Simple explanation
+        3. Remedies
+
+---
+
+# ==========================
+# Step 6: Frontend (Web UI)
+# ==========================
+frontend:
+  tech: "HTML, CSS, JavaScript (Bootstrap/Tailwind)"
+  pages:
+    - Home:
+        content: "Upload form with instructions"
+        features: "Upload image -> call /predict"
+    - Results:
+        content: "Display uploaded image, model prediction, API prediction, Gemini-enhanced explanation"
+        style: "Simple, responsive, mobile-friendly"
+
+---
+
+# ============================
+# Step 7: Non-Functional Reqs
+# ============================
+non_functional:
+  performance: "Prediction ≤ 8 seconds"
+  security:
+    - HTTPS encryption
+    - File validation
+    - Block malicious uploads
+  reliability: "99% uptime, error logging, graceful failure"
+  usability: "Prediction in <30s, language simple for farmers"
+  scalability: "Support at least 20 concurrent users"
+
+---
+
+# ===================
+# Step 8: Deliverables
+# ===================
+deliverables:
+  - Trained model file: "saved_models/best_model.h5"
+  - Class mapping file: "saved_models/class_indices.json"
+  - Flask backend with /predict endpoint
+  - Knowledge base file: "diseases.json"
+  - Integration with PlantVillage API
+  - Integration with Gemini API
+  - Frontend: upload + results UI
+  - Documentation:
+      - requirements.txt
+      - train.ipynb
+      - API usage guide
+
+---
+
+# ==========================
+# Step 9: Future Enhancements
+# ==========================
+future_scope:
+  - Mobile app with TensorFlow Lite
+  - Multi-language support
+  - Severity detection (early vs advanced)
+  - Geolocation-based outbreak tracking
+
+
+
+
+
+

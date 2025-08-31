@@ -1,0 +1,123 @@
+{
+    "project_title": "Crop Leaf Disease Detection",
+    "goal": "Build a full-stack AI system that detects crop leaf diseases using a trained deep learning model and PlantVillage API, then enhances the final answer using Gemini API, and presents results on a web interface.",
+    "tasks": [
+      {
+        "id": 1,
+        "priority": "High",
+        "name": "Dataset Handling",
+        "steps": [
+          "Download PlantVillage dataset (Kaggle/public repo).",
+          "Organize dataset into train (70%), validation (15%), test (15%).",
+          "Directory structure: data/train, data/val, data/test with subfolders by class."
+        ],
+        "deliverables": [
+          "Structured dataset ready for training and validation."
+        ]
+      },
+      {
+        "id": 2,
+        "priority": "High",
+        "name": "Data Preprocessing",
+        "steps": [
+          "Resize all images to 224x224 pixels.",
+          "Normalize pixel values between 0 and 1.",
+          "Convert labels to categorical classes.",
+          "Apply augmentations: rotation ±30, flips, zoom 0.2, brightness/contrast."
+        ],
+        "deliverables": [
+          "Preprocessed dataset pipeline for model input."
+        ]
+      },
+      {
+        "id": 3,
+        "priority": "High",
+        "name": "Model Training",
+        "steps": [
+          "Use Transfer Learning with ResNet50 pretrained on ImageNet.",
+          "Freeze convolutional base layers.",
+          "Add Dense(512, ReLU) + Dropout(0.3) + Dense(38, Softmax).",
+          "Train with categorical_crossentropy, Adam optimizer (lr=0.0001).",
+          "Batch size = 32, Epochs = 20–30, EarlyStopping enabled."
+        ],
+        "deliverables": [
+          "Trained model saved at saved_models/best_model.h5",
+          "Class mapping saved at saved_models/class_indices.json"
+        ]
+      },
+      {
+        "id": 4,
+        "priority": "Medium",
+        "name": "Model Evaluation",
+        "steps": [
+          "Evaluate model on test dataset.",
+          "Metrics: Accuracy, Precision, Recall, F1-score.",
+          "Generate confusion matrix.",
+          "Target: Accuracy >= 90%"
+        ],
+        "deliverables": [
+          "Evaluation report with metrics and confusion matrix."
+        ]
+      },
+      {
+        "id": 5,
+        "priority": "High",
+        "name": "Backend API (Flask)",
+        "steps": [
+          "Create Flask app with /predict endpoint.",
+          "Accept image file upload (JPG/PNG ≤10MB).",
+          "Preprocess uploaded image to 224x224, normalize.",
+          "Load trained model (best_model.h5) and predict disease.",
+          "Call PlantVillage API with same image for external prediction.",
+          "Merge both predictions into a structured JSON object.",
+          "Send merged result to Gemini API with prompt template.",
+          "Return final Gemini-enhanced response to frontend."
+        ],
+        "deliverables": [
+          "Flask backend running with /predict endpoint.",
+          "Integrated local model inference + PlantVillage API + Gemini phrasing."
+        ]
+      },
+      {
+        "id": 6,
+        "priority": "Medium",
+        "name": "Knowledge Base",
+        "steps": [
+          "Create diseases.json file with descriptions and remedies for known diseases.",
+          "Format: {disease_name: {description: '', remedy: ''}}"
+        ],
+        "deliverables": [
+          "diseases.json knowledge base file."
+        ]
+      },
+      {
+        "id": 7,
+        "priority": "High",
+        "name": "Frontend Web UI",
+        "steps": [
+          "Build Home page with image upload form and instructions.",
+          "Build Results page to show uploaded image, model prediction, API prediction, Gemini-enhanced explanation.",
+          "Ensure responsiveness (Bootstrap/Tailwind optional)."
+        ],
+        "deliverables": [
+          "Responsive web UI with upload and result pages integrated with backend."
+        ]
+      },
+      {
+        "id": 8,
+        "priority": "Medium",
+        "name": "Non-Functional Requirements",
+        "steps": [
+          "Ensure prediction completes in ≤ 8 seconds.",
+          "Implement HTTPS and file validation for security.",
+          "Log errors internally and show user-friendly error messages.",
+          "Support at least 20 concurrent users.",
+          "Ensure UI is farmer-friendly and accessible."
+        ],
+        "deliverables": [
+          "System compliant with non-functional requirements."
+        ]
+      }
+  ]
+}
+  
