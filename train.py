@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-LeafSense Model Training Script
-Trains a ResNet50-based model for crop leaf disease detection
-"""
-
 import os
 import json
 import numpy as np
@@ -14,372 +9,293 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-from PIL import Image
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 class LeafSenseTrainer:
-    def __init__(self, data_dir='data', model_save_dir='saved_models'):
-        self.data_dir = data_dir
-        self.model_save_dir = model_save_dir
+    def __init__(self):
+        # Basic settings
+        self.data_dir = 'data'
+        self.model_save_dir = 'saved_models'
         self.img_size = (224, 224)
-        self.batch_size = 32
-        self.epochs = 30
-        self.learning_rate = 0.0001
+        self.batch_size = 64  # Increased batch size
+        self.epochs = 25
+        self.learning_rate = 0.001
         
-        # Ensure directories exist
-        os.makedirs(self.model_save_dir, exist_ok=True)
+        # Make sure directories exist
+        if not os.path.exists(self.model_save_dir):
+            os.makedirs(self.model_save_dir)
         
-        # Initialize data generators
+        # Variables to store stuff
         self.train_generator = None
         self.val_generator = None
         self.test_generator = None
-        
-        # Model and history
         self.model = None
         self.history = None
+        self.class_indices = None
+        self.num_classes = 0
         
-    def setup_data_generators(self):
-        """Setup data generators with augmentation for training and validation"""
-        logger.info("Setting up data generators...")
+    def prepare_data(self):
+        print("Preparing data...")
         
-        # Data augmentation for training
+        # Training data with augmentation
         train_datagen = ImageDataGenerator(
             rescale=1./255,
-            rotation_range=30,
+            rotation_range=20,
             width_shift_range=0.2,
             height_shift_range=0.2,
-            shear_range=0.2,
-            zoom_range=0.2,
             horizontal_flip=True,
-            vertical_flip=True,
-            brightness_range=[0.8, 1.2],
+            zoom_range=0.2,
             fill_mode='nearest'
         )
         
-        # Only rescaling for validation and test
+        # Validation and test data - just rescale
         val_test_datagen = ImageDataGenerator(rescale=1./255)
         
-        # for Training 
+        # Load training data
         self.train_generator = train_datagen.flow_from_directory(
-            os.path.join(self.data_dir, 'train'),
+            'data/train',
             target_size=self.img_size,
             batch_size=self.batch_size,
-            class_mode='categorical',
-            shuffle=True
+            class_mode='categorical'
         )
         
-        # for  Validation 
+        # Load validation data
         self.val_generator = val_test_datagen.flow_from_directory(
-            os.path.join(self.data_dir, 'val'),
+            'data/val',
             target_size=self.img_size,
             batch_size=self.batch_size,
             class_mode='categorical',
             shuffle=False
         )
         
-        # Test generator
+        # Load test data
         self.test_generator = val_test_datagen.flow_from_directory(
-            os.path.join(self.data_dir, 'test'),
+            'data/test',
             target_size=self.img_size,
             batch_size=self.batch_size,
             class_mode='categorical',
             shuffle=False
         )
         
-        # Save class mapping
+        # Get class info
         self.class_indices = self.train_generator.class_indices
         self.num_classes = len(self.class_indices)
         
-        logger.info(f"Found {self.num_classes} classes")
-        logger.info(f"Training samples: {self.train_generator.samples}")
-        logger.info(f"Validation samples: {self.val_generator.samples}")
-        logger.info(f"Test samples: {self.test_generator.samples}")
+        print(f"Number of classes: {self.num_classes}")
+        print(f"Training images: {self.train_generator.samples}")
+        print(f"Validation images: {self.val_generator.samples}")
+        print(f"Test images: {self.test_generator.samples}")
         
         # Save class mapping
-        with open(os.path.join(self.model_save_dir, 'class_indices.json'), 'w') as f:
-            json.dump(self.class_indices, f, indent=2)
+        with open(f'{self.model_save_dir}/class_indices.json', 'w') as f:
+            json.dump(self.class_indices, f)
             
-    def build_model(self):
-        """Build the ResNet50-based model with custom classification head"""
-        logger.info("Building model...")
+    def create_model(self):
+        print("Creating model...")
         
-        # Load pre-trained ResNet50
-        base_model = ResNet50(
-            weights='imagenet',
-            include_top=False,
-            input_shape=(224, 224, 3)
-        )
+        # Check if model already exists
+        if os.path.exists(f'{self.model_save_dir}/best_model.h5'):
+            print("Loading existing model...")
+            self.model = tf.keras.models.load_model(f'{self.model_save_dir}/best_model.h5')
+            return
         
-        # Freeze the base model layers
+        # Use ResNet50 as base
+        base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+        
+        # Freeze base model
         base_model.trainable = False
         
-        # Create the model
+        # Add our own layers on top
         inputs = tf.keras.Input(shape=(224, 224, 3))
         x = base_model(inputs, training=False)
         x = GlobalAveragePooling2D()(x)
-        x = Dense(512, activation='relu')(x)
-        x = Dropout(0.3)(x)
+        x = Dense(256, activation='relu')(x)
+        x = Dropout(0.5)(x)
         outputs = Dense(self.num_classes, activation='softmax')(x)
         
         self.model = Model(inputs, outputs)
         
-        # Compile the model
+        # Compile model
         self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
         
-        logger.info("Model built successfully")
-        self.model.summary()
+        print("Model created!")
         
-    def train_model(self):
-        """Train the model with callbacks"""
-        logger.info("Starting model training...")
+    def train_initial(self):
+        print("Starting training...")
         
         # Callbacks
-        callbacks = [
-            EarlyStopping(
-                monitor='val_loss',
-                patience=5,
-                restore_best_weights=True,
-                verbose=1
-            ),
-            ModelCheckpoint(
-                filepath=os.path.join(self.model_save_dir, 'best_model.h5'),
-                monitor='val_accuracy',
-                save_best_only=True,
-                verbose=1
-            ),
-            ReduceLROnPlateau(
-                monitor='val_loss',
-                factor=0.5,
-                patience=3,
-                min_lr=1e-7,
-                verbose=1
-            )
-        ]
+        early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
         
-        # Train the model
+        model_checkpoint = ModelCheckpoint(
+            f'{self.model_save_dir}/best_model.h5',
+            monitor='val_accuracy',
+            save_best_only=True
+        )
+        
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5)
+        
+        # Train
         self.history = self.model.fit(
             self.train_generator,
             epochs=self.epochs,
             validation_data=self.val_generator,
-            callbacks=callbacks,
-            verbose=1
+            callbacks=[early_stop, model_checkpoint, reduce_lr]
         )
         
-        logger.info("Training completed")
+        print("Initial training done!")
         
-    def fine_tune_model(self):
-        """Fine-tune the model by unfreezing some layers"""
-        logger.info("Starting fine-tuning...")
+    def fine_tune(self):
+        print("Fine-tuning model...")
         
-        # Unfreeze the top layers of the base model
-        base_model = self.model.layers[1]  # ResNet50 layer
+        # Unfreeze some layers
+        base_model = self.model.layers[1]
         base_model.trainable = True
         
-        # Freeze the bottom layers
-        for layer in base_model.layers[:-30]:
+        # Freeze early layers
+        for layer in base_model.layers[:-20]:
             layer.trainable = False
             
-        # Recompile with lower learning rate
+        # Compile with lower learning rate
         self.model.compile(
-            optimizer=Adam(learning_rate=self.learning_rate / 10),
+            optimizer=Adam(learning_rate=self.learning_rate/10),
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
         
-        # Fine-tune for a few more epochs
-        fine_tune_epochs = 10
+        # Train again
+        early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
         
-        callbacks = [
-            EarlyStopping(
-                monitor='val_loss',
-                patience=3,
-                restore_best_weights=True,
-                verbose=1
-            ),
-            ModelCheckpoint(
-                filepath=os.path.join(self.model_save_dir, 'best_model.h5'),
-                monitor='val_accuracy',
-                save_best_only=True,
-                verbose=1
-            )
-        ]
-        
-        self.history = self.model.fit(
-            self.train_generator,
-            epochs=fine_tune_epochs,
-            validation_data=self.val_generator,
-            callbacks=callbacks,
-            verbose=1
+        model_checkpoint = ModelCheckpoint(
+            f'{self.model_save_dir}/best_model.h5',
+            monitor='val_accuracy',
+            save_best_only=True
         )
         
-        logger.info("Fine-tuning completed")
+        fine_tune_history = self.model.fit(
+            self.train_generator,
+            epochs=10,
+            validation_data=self.val_generator,
+            callbacks=[early_stop, model_checkpoint]
+        )
         
-    def evaluate_model(self):
-        """Evaluate the model on test data"""
-        logger.info("Evaluating model...")
+        print("Fine-tuning done!")
+        
+    def test_model(self):
+        print("Testing model...")
         
         # Load best model
-        best_model_path = os.path.join(self.model_save_dir, 'best_model.h5')
-        if os.path.exists(best_model_path):
-            self.model = tf.keras.models.load_model(best_model_path)
-            logger.info("Loaded best model for evaluation")
+        self.model = tf.keras.models.load_model(f'{self.model_save_dir}/best_model.h5')
         
-        # Evaluate on test data
-        test_loss, test_accuracy = self.model.evaluate(self.test_generator, verbose=1)
-        logger.info(f"Test accuracy: {test_accuracy:.4f}")
-        logger.info(f"Test loss: {test_loss:.4f}")
+        # Test
+        test_loss, test_accuracy = self.model.evaluate(self.test_generator)
+        print(f"Test accuracy: {test_accuracy:.4f}")
         
-        # Predictions
+        # Get predictions
         self.test_generator.reset()
-        predictions = self.model.predict(self.test_generator, verbose=1)
+        predictions = self.model.predict(self.test_generator)
         predicted_classes = np.argmax(predictions, axis=1)
         true_classes = self.test_generator.classes
         
         # Classification report
         class_names = list(self.class_indices.keys())
-        report = classification_report(
-            true_classes, 
-            predicted_classes, 
-            target_names=class_names,
-            output_dict=True
-        )
+        report = classification_report(true_classes, predicted_classes, target_names=class_names)
+        print("Classification Report:")
+        print(report)
         
-        logger.info("Classification Report:")
-        logger.info(classification_report(true_classes, predicted_classes, target_names=class_names))
-        
-        # Save detailed report
-        with open(os.path.join(self.model_save_dir, 'evaluation_report.json'), 'w') as f:
-            json.dump(report, f, indent=2)
+        # Save report
+        report_dict = classification_report(true_classes, predicted_classes, target_names=class_names, output_dict=True)
+        with open(f'{self.model_save_dir}/test_results.json', 'w') as f:
+            json.dump(report_dict, f, indent=2)
             
         # Confusion matrix
         cm = confusion_matrix(true_classes, predicted_classes)
         self.plot_confusion_matrix(cm, class_names)
         
-        return test_accuracy, report
+        return test_accuracy
         
     def plot_confusion_matrix(self, cm, class_names):
-        """Plot and save confusion matrix"""
-        plt.figure(figsize=(20, 16))
-        sns.heatmap(
-            cm, 
-            annot=True, 
-            fmt='d', 
-            cmap='Blues',
-            xticklabels=class_names,
-            yticklabels=class_names
-        )
+        plt.figure(figsize=(15, 12))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                   xticklabels=class_names, yticklabels=class_names)
         plt.title('Confusion Matrix')
         plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.xticks(rotation=45, ha='right')
-        plt.yticks(rotation=0)
+        plt.ylabel('Actual')
+        plt.xticks(rotation=45)
         plt.tight_layout()
-        plt.savefig(os.path.join(self.model_save_dir, 'confusion_matrix.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(f'{self.model_save_dir}/confusion_matrix.png')
         plt.close()
         
-    def plot_training_history(self):
-        """Plot training history"""
+    def plot_training_curves(self):
         if self.history is None:
-            logger.warning("No training history available")
             return
             
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+        plt.figure(figsize=(12, 4))
         
-        # Accuracy
-        ax1.plot(self.history.history['accuracy'], label='Training Accuracy')
-        ax1.plot(self.history.history['val_accuracy'], label='Validation Accuracy')
-        ax1.set_title('Model Accuracy')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Accuracy')
-        ax1.legend()
-        ax1.grid(True)
+        # Accuracy plot
+        plt.subplot(1, 2, 1)
+        plt.plot(self.history.history['accuracy'], label='Training Accuracy')
+        plt.plot(self.history.history['val_accuracy'], label='Validation Accuracy')
+        plt.title('Model Accuracy')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.legend()
         
-        # Loss
-        ax2.plot(self.history.history['loss'], label='Training Loss')
-        ax2.plot(self.history.history['val_loss'], label='Validation Loss')
-        ax2.set_title('Model Loss')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('Loss')
-        ax2.legend()
-        ax2.grid(True)
+        # Loss plot
+        plt.subplot(1, 2, 2)
+        plt.plot(self.history.history['loss'], label='Training Loss')
+        plt.plot(self.history.history['val_loss'], label='Validation Loss')
+        plt.title('Model Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
         
         plt.tight_layout()
-        plt.savefig(os.path.join(self.model_save_dir, 'training_history.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(f'{self.model_save_dir}/training_curves.png')
         plt.close()
         
-    def save_model_summary(self):
-        """Save model summary to text file"""
-        summary_path = os.path.join(self.model_save_dir, 'model_summary.txt')
+    def train_complete_model(self):
+        print("Starting complete training process...")
         
-        with open(summary_path, 'w') as f:
-            self.model.summary(print_fn=lambda x: f.write(x + '\n'))
-            
-        logger.info(f"Model summary saved to {summary_path}")
+        # Step 1: Prepare data
+        self.prepare_data()
         
-    def run_training_pipeline(self):
-        """Run the complete training pipeline"""
-        try:
-            logger.info("Starting LeafSense training pipeline...")
-            
-            # Setup data generators
-            self.setup_data_generators()
-            
-            # Build model
-            self.build_model()
-            
-            # Train model
-            self.train_model()
-            
-            # Fine-tune model
-            self.fine_tune_model()
-            
-            # Evaluate model
-            accuracy, report = self.evaluate_model()
-            
-            # Plot results
-            self.plot_training_history()
-            
-            # Save model summary
-            self.save_model_summary()
-            
-            logger.info("Training pipeline completed successfully!")
-            logger.info(f"Final test accuracy: {accuracy:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Training pipeline failed: {str(e)}")
-            return False
+        # Step 2: Create model
+        self.create_model()
+        
+        # Step 3: Initial training
+        self.train_initial()
+        
+        # Step 4: Fine-tune
+        self.fine_tune()
+        
+        # Step 5: Test model
+        accuracy = self.test_model()
+        
+        # Step 6: Plot results
+        self.plot_training_curves()
+        
+        print(f"Training complete! Final accuracy: {accuracy:.4f}")
+        return accuracy
 
+# Main function
 def main():
-    """Main function to run training"""
-    # Check if data directory exists
+    # Check if data exists
     if not os.path.exists('data'):
-        logger.error("Data directory not found. Please ensure you have the dataset organized in data/train, data/val, data/test directories.")
+        print("Error: data folder not found!")
+        print("Make sure you have data/train, data/val, and data/test folders")
         return
         
-    # Initialize trainer
+    # Create trainer and start training
     trainer = LeafSenseTrainer()
+    trainer.train_complete_model()
     
-    # Run training pipeline
-    success = trainer.run_training_pipeline()
-    
-    if success:
-        logger.info("Training completed successfully! Check the saved_models directory for results.")
-    else:
-        logger.error("Training failed. Check the logs for details.")
+    print("All done! Check the saved_models folder for results.")
 
 if __name__ == "__main__":
     main()
