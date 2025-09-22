@@ -20,13 +20,21 @@ class LeafSenseTrainer:
         self.data_dir = 'data'
         self.model_save_dir = 'saved_models'
         self.img_size = (224, 224)
-        self.batch_size = 32  # Reduced for better gradient updates
-        self.epochs = 50      # Increased from 25
-        self.learning_rate = 0.0001  # Reduced from 0.001
+        self.batch_size = 32
+        self.epochs = 50
+        self.learning_rate = 0.0001
+        
+        # Resume training settings
+        self.checkpoint_dir = os.path.join(self.model_save_dir, 'checkpoints')
+        self.training_state_file = os.path.join(self.model_save_dir, 'training_state.json')
+        self.resume_from_epoch = 0
+        self.initial_epoch = 0
         
         # Make sure directories exist
         if not os.path.exists(self.model_save_dir):
             os.makedirs(self.model_save_dir)
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
         
         # Variables to store stuff
         self.train_generator = None
@@ -170,12 +178,34 @@ class LeafSenseTrainer:
         print(f"Model has {self.model.count_params():,} parameters")
         
     def train_initial(self):
-        print("Starting initial training with class weights...")
+        print("Starting initial training with resume support...")
         
-        # IMPROVED callbacks
+        # Check if we should resume
+        state = self.load_training_state()
+        
+        if state and state.get('phase') == 'initial' and self.resume_from_epoch > 0:
+            print(f"Resuming initial training from epoch {self.resume_from_epoch}")
+            
+            # Load the latest checkpoint
+            checkpoint_info = self.find_latest_checkpoint()
+            if checkpoint_info:
+                checkpoint_path, checkpoint_epoch = checkpoint_info
+                print(f"Loading checkpoint from epoch {checkpoint_epoch}")
+                self.model = tf.keras.models.load_model(checkpoint_path)
+            
+            # Adjust epochs
+            remaining_epochs = self.epochs - self.resume_from_epoch
+            if remaining_epochs <= 0:
+                print("Initial training already completed, moving to fine-tuning...")
+                return
+        else:
+            remaining_epochs = self.epochs
+            self.initial_epoch = 0
+        
+        # IMPROVED callbacks with checkpoint support
         early_stop = EarlyStopping(
             monitor='val_loss', 
-            patience=10,  # Increased patience
+            patience=10,
             restore_best_weights=True,
             verbose=1
         )
@@ -189,19 +219,23 @@ class LeafSenseTrainer:
         
         reduce_lr = ReduceLROnPlateau(
             monitor='val_loss', 
-            factor=0.5,  # More conservative reduction
+            factor=0.5,
             patience=5,
             min_lr=1e-7,
             verbose=1
         )
         
-        # Train with CLASS WEIGHTS
+        # Add epoch checkpoint callback
+        epoch_checkpoint = self.create_checkpoint_callback('initial')
+        
+        # Train with resume support
         self.history = self.model.fit(
             self.train_generator,
             epochs=self.epochs,
+            initial_epoch=self.initial_epoch,  # Resume from here
             validation_data=self.val_generator,
-            callbacks=[early_stop, model_checkpoint, reduce_lr],
-            class_weight=self.class_weights,  # ADDED CLASS WEIGHTS
+            callbacks=[early_stop, model_checkpoint, reduce_lr, epoch_checkpoint],
+            class_weight=self.class_weights,
             verbose=1
         )
         
@@ -378,38 +412,161 @@ class LeafSenseTrainer:
         plt.savefig(f'{self.model_save_dir}/improved_training_curves.png', dpi=300, bbox_inches='tight')
         plt.close()
         
+    def save_training_state(self, epoch, phase='initial'):
+        """Save current training state"""
+        state = {
+            'last_completed_epoch': epoch,
+            'phase': phase,  # 'initial' or 'fine_tune'
+            'total_epochs': self.epochs,
+            'learning_rate': self.learning_rate,
+            'batch_size': self.batch_size
+        }
+        
+        with open(self.training_state_file, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        print(f"Training state saved: epoch {epoch}, phase: {phase}")
+
+    def load_training_state(self):
+        """Load previous training state if exists"""
+        if os.path.exists(self.training_state_file):
+            with open(self.training_state_file, 'r') as f:
+                state = json.load(f)
+            
+            self.resume_from_epoch = state.get('last_completed_epoch', 0)
+            self.initial_epoch = self.resume_from_epoch
+            
+            print(f"Found previous training state:")
+            print(f"  - Last completed epoch: {self.resume_from_epoch}")
+            print(f"  - Phase: {state.get('phase', 'unknown')}")
+            
+            return state
+        return None
+
+    def find_latest_checkpoint(self):
+        """Find the latest checkpoint file"""
+        if not os.path.exists(self.checkpoint_dir):
+            return None
+        
+        checkpoint_files = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('checkpoint_epoch_') and f.endswith('.keras')]
+        if not checkpoint_files:
+            return None
+        
+        # Extract epoch numbers and find the latest
+        epochs = []
+        for f in checkpoint_files:
+            try:
+                epoch_num = int(f.split('_')[2].split('.')[0])
+                epochs.append((epoch_num, f))
+            except:
+                continue
+        
+        if epochs:
+            latest_epoch, latest_file = max(epochs, key=lambda x: x[0])
+            return os.path.join(self.checkpoint_dir, latest_file), latest_epoch
+        
+        return None
+    
+    def create_checkpoint_callback(self, phase='initial'):
+        """Create callback to save model after each epoch"""
+        class EpochCheckpoint(tf.keras.callbacks.Callback):
+            def __init__(self, checkpoint_dir, state_file, trainer, phase):
+                super().__init__()
+                self.checkpoint_dir = checkpoint_dir
+                self.state_file = state_file
+                self.trainer = trainer
+                self.phase = phase
+            
+            def on_epoch_end(self, epoch, logs=None):
+                # Save model checkpoint
+                checkpoint_path = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch + 1}.keras')
+                self.model.save(checkpoint_path)
+                
+                # Save training state
+                self.trainer.save_training_state(epoch + 1, self.phase)
+                
+                # Clean up old checkpoints (keep only last 3)
+                self.cleanup_old_checkpoints()
+            
+            def cleanup_old_checkpoints(self):
+                checkpoint_files = [f for f in os.listdir(self.checkpoint_dir) 
+                                  if f.startswith('checkpoint_epoch_') and f.endswith('.keras')]
+                if len(checkpoint_files) > 3:
+                    # Sort by epoch number
+                    epochs_files = []
+                    for f in checkpoint_files:
+                        try:
+                            epoch_num = int(f.split('_')[2].split('.')[0])
+                            epochs_files.append((epoch_num, f))
+                        except:
+                            continue
+                    
+                    epochs_files.sort(key=lambda x: x[0])
+                    
+                    # Remove oldest checkpoints, keep only last 3
+                    for epoch_num, filename in epochs_files[:-3]:
+                        try:
+                            os.remove(os.path.join(self.checkpoint_dir, filename))
+                            print(f"Cleaned up old checkpoint: {filename}")
+                        except:
+                            pass
+        
+        return EpochCheckpoint(self.checkpoint_dir, self.training_state_file, self, phase)
+    
     def train_complete_model(self):
-        print("Starting IMPROVED training process...")
-        print("Changes from original:")
-        print("- Lower learning rate (0.0001 vs 0.001)")
-        print("- More epochs (50 vs 25)")
+        print("Starting IMPROVED training process with RESUME support...")
+        
+        # Check if we're resuming
+        state = self.load_training_state()
+        if state:
+            print("🔄 RESUMING PREVIOUS TRAINING")
+            print(f"Last completed epoch: {state.get('last_completed_epoch', 0)}")
+            print(f"Phase: {state.get('phase', 'unknown')}")
+        else:
+            print("🆕 STARTING NEW TRAINING")
+        
+        print("Features:")
+        print("- Resume training from interruption")
+        print("- Automatic checkpoint saving")
+        print("- Lower learning rate (0.0001)")
         print("- Class weights for imbalanced data")
         print("- Improved data augmentation")
-        print("- Better model architecture with BatchNorm")
-        print("- Top-3 accuracy tracking")
-        print("- More conservative learning rate reduction")
         print("-" * 50)
         
         # Step 1: Prepare data
         self.prepare_data()
         
-        # Step 2: Create model
+        # Step 2: Create or load model
         self.create_model()
         
-        # Step 3: Initial training
-        self.train_initial()
+        # Step 3: Check if we need to resume from checkpoint
+        if state and self.resume_from_epoch > 0:
+            checkpoint_info = self.find_latest_checkpoint()
+            if checkpoint_info:
+                checkpoint_path, checkpoint_epoch = checkpoint_info
+                print(f"Loading model from checkpoint: epoch {checkpoint_epoch}")
+                self.model = tf.keras.models.load_model(checkpoint_path)
         
-        # Step 4: Fine-tune
-        self.fine_tune()
+        # Step 4: Initial training (with resume)
+        if not state or state.get('phase') == 'initial':
+            self.train_initial()
         
-        # Step 5: Test model
+        # Step 5: Fine-tune (with resume)
+        if not state or state.get('phase') in ['initial', 'fine_tune']:
+            self.fine_tune()
+        
+        # Step 6: Test model
         accuracy = self.test_model()
         
-        # Step 6: Plot results
+        # Step 7: Plot results
         self.plot_training_curves()
         
-        print(f"Improved training complete! Final accuracy: {accuracy:.4f}")
-        print("Check saved_models/ for results and plots")
+        # Clean up training state (training completed)
+        if os.path.exists(self.training_state_file):
+            os.remove(self.training_state_file)
+            print("Training completed successfully - state file cleaned up")
+        
+        print(f"Training complete! Final accuracy: {accuracy:.4f}")
         return accuracy
 
 # Main function

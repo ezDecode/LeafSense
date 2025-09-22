@@ -86,7 +86,6 @@ venv.bak/
 gunicorn.log
 
 # Model artifacts
-saved_models/
 *.h5
 *.hdf5
 *.pb
