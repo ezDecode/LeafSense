@@ -91,6 +91,9 @@ gunicorn.log
 *.pb
 *.ckpt
 *.tflite
+*.keras
+saved_models/
+checkpoints/
 
 # Data
 data/
