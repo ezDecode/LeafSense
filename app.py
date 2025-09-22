@@ -40,14 +40,22 @@ def load_knowledge_base():
 # Load trained model
 def load_model():
     try:
-        model_path = 'saved_models/best_model.h5'
+        # Try new format first, fallback to old format
+        model_path = 'saved_models/best_model.keras'
         if os.path.exists(model_path):
             model = tf.keras.models.load_model(model_path)
-            logger.info("Model loaded successfully")
+            logger.info("Model loaded successfully (.keras format)")
             return model
-        else:
-            logger.warning("Model file not found, returning None")
-            return None
+        
+        # Fallback to old format
+        old_model_path = 'saved_models/best_model.h5'
+        if os.path.exists(old_model_path):
+            model = tf.keras.models.load_model(old_model_path)
+            logger.info("Model loaded successfully (.h5 format)")
+            return model
+            
+        logger.warning("Model file not found, returning None")
+        return None
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         return None
