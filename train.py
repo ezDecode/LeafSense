@@ -14,15 +14,110 @@ from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# GPU Configuration for RTX 3050 optimization
+def configure_gpu():
+    """Configure GPU settings for optimal performance on RTX 3050"""
+    print("🔧 Configuring GPU for RTX 3050...")
+    
+    # Check GPU availability
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Enable memory growth to avoid allocating all GPU memory at once
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            
+            print(f"✅ Found {len(gpus)} GPU(s):")
+            for i, gpu in enumerate(gpus):
+                print(f"   GPU {i}: {gpu}")
+                
+            # Set GPU as the default device
+            tf.config.set_visible_devices(gpus[0], 'GPU')
+            
+            # Enable mixed precision for faster training on RTX 3050
+            try:
+                policy = tf.keras.mixed_precision.Policy('mixed_float16')
+                tf.keras.mixed_precision.set_global_policy(policy)
+                print("✅ Mixed precision enabled (float16) for faster training")
+            except Exception as e:
+                print(f"⚠️  Mixed precision not available: {e}")
+            
+            return True
+            
+        except RuntimeError as e:
+            print(f"❌ GPU configuration error: {e}")
+            return False
+    else:
+        print("❌ No GPU found! Training will use CPU (slower).")
+        print("💡 Install CUDA Toolkit 11.2 and cuDNN 8.1 for GPU acceleration")
+        print("   Run: install_cuda_rtx3050.bat for automatic installation")
+        return False
+
+def check_gpu_tensorflow():
+    """Check TensorFlow GPU configuration"""
+    print("\n🔍 TensorFlow GPU Information:")
+    print(f"TensorFlow version: {tf.__version__}")
+    print(f"Built with CUDA: {tf.test.is_built_with_cuda()}")
+    
+    # Use newer API if available
+    if hasattr(tf.config, 'list_physical_devices'):
+        gpus = tf.config.list_physical_devices('GPU')
+        print(f"Physical GPUs: {len(gpus)}")
+        if gpus:
+            print("✅ CUDA GPUs detected:")
+            for gpu in gpus:
+                print(f"   {gpu}")
+                
+            # Test GPU computation
+            try:
+                with tf.device('/GPU:0'):
+                    a = tf.constant([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+                    b = tf.constant([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+                    c = tf.matmul(a, b)
+                print("✅ GPU computation test passed")
+                return True
+            except Exception as e:
+                print(f"❌ GPU computation test failed: {e}")
+                return False
+        else:
+            print("❌ No CUDA GPUs detected")
+            return False
+    else:
+        # Fallback for older TensorFlow versions
+        try:
+            print(f"GPU available: {tf.test.is_gpu_available()}")
+            return tf.test.is_gpu_available()
+        except:
+            print("GPU available: Unknown")
+            return False
+
+# Initialize GPU configuration
+print("🚀 Initializing LeafSense GPU-Optimized Training System")
+print("=" * 60)
+GPU_AVAILABLE = configure_gpu()
+check_gpu_tensorflow()
+print("=" * 60)
+
 class LeafSenseTrainer:
     def __init__(self):
-        # Basic settings - IMPROVED PARAMETERS
+        # Basic settings - OPTIMIZED FOR RTX 3050
         self.data_dir = 'data'
         self.model_save_dir = 'saved_models'
         self.img_size = (224, 224)
-        self.batch_size = 32
+        
+        # Optimized batch size for RTX 3050 (8GB VRAM)
+        # Larger batch size for better GPU utilization
+        self.batch_size = 64 if GPU_AVAILABLE else 32
         self.epochs = 50
         self.learning_rate = 0.0001
+        
+        # RTX 3050 optimizations
+        self.use_mixed_precision = GPU_AVAILABLE
+        self.prefetch_buffer = tf.data.AUTOTUNE if GPU_AVAILABLE else 1
+        
+        print(f"🚀 Trainer initialized for {'GPU (RTX 3050)' if GPU_AVAILABLE else 'CPU'}")
+        print(f"📦 Batch size: {self.batch_size}")
+        print(f"🎯 Mixed precision: {'Enabled' if self.use_mixed_precision else 'Disabled'}")
         
         # Resume training settings
         self.checkpoint_dir = os.path.join(self.model_save_dir, 'checkpoints')
@@ -47,7 +142,7 @@ class LeafSenseTrainer:
         self.class_weights = None
         
     def prepare_data(self):
-        print("Preparing data with improved augmentation...")
+        print("Preparing data with improved augmentation and GPU optimization...")
         
         # IMPROVED data augmentation
         train_datagen = ImageDataGenerator(
@@ -65,7 +160,7 @@ class LeafSenseTrainer:
         # Validation and test data - just rescale
         val_test_datagen = ImageDataGenerator(rescale=1./255)
         
-        # Load training data
+        # Load training data with GPU optimization
         self.train_generator = train_datagen.flow_from_directory(
             'data/train',
             target_size=self.img_size,
@@ -96,6 +191,27 @@ class LeafSenseTrainer:
             print("No test data found, will use validation data for final testing")
             self.test_generator = None
         
+        # GPU Optimization: Convert to tf.data for better performance
+        if GPU_AVAILABLE:
+            print("🚀 Applying GPU optimizations to data pipeline...")
+            
+            # Convert generators to tf.data datasets for better GPU utilization
+            self.train_dataset = tf.data.Dataset.from_generator(
+                lambda: self.train_generator,
+                output_signature=(
+                    tf.TensorSpec(shape=(None, 224, 224, 3), dtype=tf.float32),
+                    tf.TensorSpec(shape=(None, self.train_generator.num_classes), dtype=tf.float32)
+                )
+            ).prefetch(self.prefetch_buffer)
+            
+            self.val_dataset = tf.data.Dataset.from_generator(
+                lambda: self.val_generator,
+                output_signature=(
+                    tf.TensorSpec(shape=(None, 224, 224, 3), dtype=tf.float32),
+                    tf.TensorSpec(shape=(None, self.val_generator.num_classes), dtype=tf.float32)
+                )
+            ).prefetch(self.prefetch_buffer)
+        
         # Get class info
         self.class_indices = self.train_generator.class_indices
         self.num_classes = len(self.class_indices)
@@ -110,6 +226,10 @@ class LeafSenseTrainer:
             print(f"Test images: {self.test_generator.samples}")
         else:
             print("Test images: 0 (will use validation set for testing)")
+        
+        print(f"🚀 Optimized batch size for RTX 3050: {self.batch_size}")
+        if GPU_AVAILABLE:
+            print("✅ Data pipeline optimized for GPU training")
         
         # Save class mapping
         with open(f'{self.model_save_dir}/class_indices.json', 'w') as f:
@@ -139,7 +259,7 @@ class LeafSenseTrainer:
         print(f"Class weights calculated. Range: {min(class_weights.values()):.2f} - {max(class_weights.values()):.2f}")
             
     def create_model(self):
-        print("Creating improved model...")
+        print("Creating improved model with GPU optimizations...")
         
         # Check if model already exists
         if os.path.exists(f'{self.model_save_dir}/best_model.keras'):
@@ -147,38 +267,53 @@ class LeafSenseTrainer:
             self.model = tf.keras.models.load_model(f'{self.model_save_dir}/best_model.keras')
             return
         
-        # Use ResNet50 as base
-        base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+        # Use ResNet50 as base with GPU-optimized settings
+        with tf.device('/GPU:0' if GPU_AVAILABLE else '/CPU:0'):
+            base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+            
+            # Freeze base model initially
+            base_model.trainable = False
+            
+            # IMPROVED architecture with BatchNormalization and mixed precision support
+            inputs = tf.keras.Input(shape=(224, 224, 3))
+            x = base_model(inputs, training=False)
+            x = GlobalAveragePooling2D()(x)
+            x = BatchNormalization()(x)  # Added
+            x = Dense(512, activation='relu')(x)  # Increased size
+            x = Dropout(0.5)(x)
+            x = BatchNormalization()(x)  # Added
+            x = Dense(256, activation='relu')(x)  # Added layer
+            x = Dropout(0.3)(x)
+            
+            # Output layer - use float32 for mixed precision
+            if self.use_mixed_precision:
+                outputs = Dense(self.num_classes, activation='softmax', dtype='float32', name='predictions')(x)
+            else:
+                outputs = Dense(self.num_classes, activation='softmax')(x)
+            
+            self.model = Model(inputs, outputs)
         
-        # Freeze base model initially
-        base_model.trainable = False
+        # Compile model with GPU-optimized settings
+        optimizer = Adam(learning_rate=self.learning_rate)
         
-        # IMPROVED architecture with BatchNormalization
-        inputs = tf.keras.Input(shape=(224, 224, 3))
-        x = base_model(inputs, training=False)
-        x = GlobalAveragePooling2D()(x)
-        x = BatchNormalization()(x)  # Added
-        x = Dense(512, activation='relu')(x)  # Increased size
-        x = Dropout(0.5)(x)
-        x = BatchNormalization()(x)  # Added
-        x = Dense(256, activation='relu')(x)  # Added layer
-        x = Dropout(0.3)(x)
-        outputs = Dense(self.num_classes, activation='softmax')(x)
+        # For mixed precision, wrap optimizer
+        if self.use_mixed_precision:
+            optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
         
-        self.model = Model(inputs, outputs)
-        
-        # Compile model with LOWER learning rate
         self.model.compile(
-            optimizer=Adam(learning_rate=self.learning_rate),
+            optimizer=optimizer,
             loss='categorical_crossentropy',
             metrics=['accuracy', tf.keras.metrics.TopKCategoricalAccuracy(k=3, name='top_3_accuracy')]
         )
         
-        print("Improved model created!")
-        print(f"Model has {self.model.count_params():,} parameters")
+        print("✅ GPU-optimized model created!")
+        print(f"📊 Model has {self.model.count_params():,} parameters")
+        print(f"🎯 Mixed precision: {'Enabled' if self.use_mixed_precision else 'Disabled'}")
+        if GPU_AVAILABLE:
+            print("🚀 Model will train on GPU for faster performance")
         
     def train_initial(self):
-        print("Starting initial training with resume support...")
+        print("Starting initial training with GPU optimization and resume support...")
         
         # Check if we should resume
         state = self.load_training_state()
@@ -202,7 +337,7 @@ class LeafSenseTrainer:
             remaining_epochs = self.epochs
             self.initial_epoch = 0
         
-        # IMPROVED callbacks with checkpoint support
+        # GPU-optimized callbacks
         early_stop = EarlyStopping(
             monitor='val_loss', 
             patience=10,
@@ -228,21 +363,27 @@ class LeafSenseTrainer:
         # Add epoch checkpoint callback
         epoch_checkpoint = self.create_checkpoint_callback('initial')
         
-        # Train with resume support
+        # Use GPU-optimized data if available
+        train_data = getattr(self, 'train_dataset', self.train_generator)
+        val_data = getattr(self, 'val_dataset', self.val_generator)
+        
+        print(f"🚀 Training on {'GPU' if GPU_AVAILABLE else 'CPU'} with batch size {self.batch_size}")
+        
+        # Train with resume support and GPU optimization
         self.history = self.model.fit(
-            self.train_generator,
+            train_data,
             epochs=self.epochs,
             initial_epoch=self.initial_epoch,  # Resume from here
-            validation_data=self.val_generator,
+            validation_data=val_data,
             callbacks=[early_stop, model_checkpoint, reduce_lr, epoch_checkpoint],
             class_weight=self.class_weights,
             verbose=1
         )
         
-        print("Initial training done!")
+        print("✅ Initial training done!")
         
     def fine_tune(self):
-        print("Fine-tuning model...")
+        print("Fine-tuning model with GPU optimization...")
         
         # Unfreeze more layers for fine-tuning
         base_model = self.model.layers[1]
@@ -252,9 +393,15 @@ class LeafSenseTrainer:
         for layer in base_model.layers[:-30]:  # Unfreeze last 30 layers instead of 20
             layer.trainable = False
             
-        # Compile with EVEN LOWER learning rate
+        # Compile with GPU-optimized settings and lower learning rate
+        optimizer = Adam(learning_rate=self.learning_rate/5)  # Even lower
+        
+        # For mixed precision, wrap optimizer
+        if self.use_mixed_precision:
+            optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
+            
         self.model.compile(
-            optimizer=Adam(learning_rate=self.learning_rate/5),  # Even lower
+            optimizer=optimizer,
             loss='categorical_crossentropy',
             metrics=['accuracy', tf.keras.metrics.TopKCategoricalAccuracy(k=3, name='top_3_accuracy')]
         )
@@ -282,10 +429,16 @@ class LeafSenseTrainer:
             verbose=1
         )
         
+        # Use GPU-optimized data if available
+        train_data = getattr(self, 'train_dataset', self.train_generator)
+        val_data = getattr(self, 'val_dataset', self.val_generator)
+        
+        print(f"🔧 Fine-tuning on {'GPU' if GPU_AVAILABLE else 'CPU'}")
+        
         fine_tune_history = self.model.fit(
-            self.train_generator,
+            train_data,
             epochs=20,  # More fine-tuning epochs
-            validation_data=self.val_generator,
+            validation_data=val_data,
             callbacks=[early_stop, model_checkpoint, reduce_lr],
             class_weight=self.class_weights,  # Keep using class weights
             verbose=1
@@ -297,7 +450,7 @@ class LeafSenseTrainer:
                 if key in fine_tune_history.history:
                     self.history.history[key].extend(fine_tune_history.history[key])
         
-        print("Fine-tuning done!")
+        print("✅ Fine-tuning done!")
         
     def test_model(self):
         print("Testing model...")
@@ -514,7 +667,12 @@ class LeafSenseTrainer:
         return EpochCheckpoint(self.checkpoint_dir, self.training_state_file, self, phase)
     
     def train_complete_model(self):
-        print("Starting IMPROVED training process with RESUME support...")
+        print("Starting GPU-OPTIMIZED training process with RESUME support...")
+        print("🎯 RTX 3050 Optimizations:")
+        print(f"   - GPU Detection: {'✅ Enabled' if GPU_AVAILABLE else '❌ Not Available'}")
+        print(f"   - Mixed Precision: {'✅ Enabled' if self.use_mixed_precision else '❌ Disabled'}")
+        print(f"   - Optimized Batch Size: {self.batch_size}")
+        print(f"   - Memory Growth: {'✅ Enabled' if GPU_AVAILABLE else '❌ N/A'}")
         
         # Check if we're resuming
         state = self.load_training_state()
@@ -525,10 +683,12 @@ class LeafSenseTrainer:
         else:
             print("🆕 STARTING NEW TRAINING")
         
-        print("Features:")
+        print("Enhanced Features:")
+        print("- GPU acceleration with CUDA/cuDNN")
+        print("- Mixed precision training (float16)")
+        print("- Optimized data pipeline")
         print("- Resume training from interruption")
         print("- Automatic checkpoint saving")
-        print("- Lower learning rate (0.0001)")
         print("- Class weights for imbalanced data")
         print("- Improved data augmentation")
         print("-" * 50)
@@ -546,6 +706,14 @@ class LeafSenseTrainer:
                 checkpoint_path, checkpoint_epoch = checkpoint_info
                 print(f"Loading model from checkpoint: epoch {checkpoint_epoch}")
                 self.model = tf.keras.models.load_model(checkpoint_path)
+        
+        # Display GPU memory info if available
+        if GPU_AVAILABLE:
+            try:
+                gpu_details = tf.config.experimental.get_device_details(tf.config.list_logical_devices('GPU')[0])
+                print(f"🚀 GPU Details: {gpu_details}")
+            except:
+                print("🚀 GPU training enabled")
         
         # Step 4: Initial training (with resume)
         if not state or state.get('phase') == 'initial':
@@ -566,22 +734,44 @@ class LeafSenseTrainer:
             os.remove(self.training_state_file)
             print("Training completed successfully - state file cleaned up")
         
-        print(f"Training complete! Final accuracy: {accuracy:.4f}")
+        print(f"🎉 Training complete! Final accuracy: {accuracy:.4f}")
+        print(f"🚀 Trained using: {'GPU (RTX 3050)' if GPU_AVAILABLE else 'CPU'}")
         return accuracy
 
 # Main function
 def main():
+    print("=" * 60)
+    print("🌿 LeafSense Plant Disease Classification Training")
+    print("🚀 GPU-Optimized for RTX 3050")
+    print("=" * 60)
+    
     # Check if data exists
     if not os.path.exists('data'):
-        print("Error: data folder not found!")
+        print("❌ Error: data folder not found!")
         print("Make sure you have data/train, data/val, and data/test folders")
         return
         
+    print("✅ Data folder found!")
+    
     # Create trainer and start training
     trainer = LeafSenseTrainer()
+    
+    # Start training with all optimizations
     trainer.train_complete_model()
     
-    print("All done! Check the saved_models folder for improved results.")
+    print("\n" + "=" * 60)
+    print("🎉 Training completed!")
+    print("📁 Check the saved_models folder for results:")
+    print("   - best_model.keras (trained model)")
+    print("   - improved_test_results.json (detailed results)")
+    print("   - improved_training_curves.png (training plots)")
+    print("   - improved_confusion_matrix.png (confusion matrix)")
+    print("   - class_indices.json (class mappings)")
+    if GPU_AVAILABLE:
+        print("🚀 Training was accelerated using GPU!")
+    else:
+        print("⚠️  Training used CPU - consider installing CUDA for faster training")
+    print("=" * 60)
 
 if __name__ == "__main__":
     main()

@@ -126,3 +126,6 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .venv
+.bat
+.ps1
+*test.py
