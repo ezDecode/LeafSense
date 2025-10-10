@@ -80,7 +80,7 @@ venv.bak/
 
 # dotenv environment variables
 .env
-.env.*
+
 
 # Gunicorn log files
 gunicorn.log
