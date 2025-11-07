@@ -1,8 +1,10 @@
 # LeafSense - AI-Powered Crop Disease Detection System
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.13+-orange.svg)](https://tensorflow.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)](https://flask.palletsprojects.com/)
+[![Python](https://img.shields.io/badge/Python-3.10.12-blue.svg)](https://www.python.org/downloads/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.16.1-orange.svg)](https://tensorflow.org/)
+[![CUDA](https://img.shields.io/badge/CUDA-13.0-green.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![cuDNN](https://img.shields.io/badge/cuDNN-9.0-blue.svg)](https://developer.nvidia.com/cudnn)
+[![Flask](https://img.shields.io/badge/Flask-3.0.3-green.svg)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 LeafSense is a full-stack AI system that detects crop leaf diseases using deep learning, integrates with PlantVillage API for external validation, and enhances results using Google's Gemini API to provide farmer-friendly explanations.
@@ -16,16 +18,18 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
 - **Comprehensive Knowledge Base**: Detailed disease descriptions and treatment recommendations
 - **Real-time Processing**: Fast prediction pipeline (≤8 seconds)
 - **Scalable Architecture**: Supports multiple concurrent users
+- **GPU Support**: Optimized for CUDA 13 and cuDNN 9
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- TensorFlow 2.13+
-- Flask 2.3+
-- 8GB+ RAM (for model training)
-- GPU recommended for training (optional)
+- **Python 3.10+** (recommended)
+- **TensorFlow 2.16.1+** (with CUDA support for GPU)
+- **Flask 3.0.3+**
+- **8GB+ RAM** (for model training)
+- **NVIDIA GPU** (optional, for faster training)
+- **Kaggle Account** (free - for dataset download)
 
 ### Installation
 
@@ -46,7 +50,26 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables**
+4. **Set up Kaggle API (for dataset download)**
+   
+   a. Create a free account at [kaggle.com](https://www.kaggle.com/)
+   
+   b. Get your API token:
+   - Go to `https://www.kaggle.com/settings`
+   - Scroll to the **API** section
+   - Click **"Create New API Token"**
+   - This downloads `kaggle.json`
+   
+   c. Place the token file:
+   - **Windows**: `C:\Users\<YourUsername>\.kaggle\kaggle.json`
+   - **Linux/Mac**: `~/.kaggle/kaggle.json`
+   
+   d. Set permissions (Linux/Mac only):
+   ```bash
+   chmod 600 ~/.kaggle/kaggle.json
+   ```
+
+5. **Set up environment variables**
    ```bash
    # Copy the example environment file
    cp .env.example .env
@@ -57,12 +80,21 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
    SECRET_KEY=your_secret_key_here
    ```
 
-5. **Run the application**
+6. **Train the model (downloads dataset automatically)**
+   ```bash
+   # The script will automatically download the dataset from Kaggle
+   python train.py
+   
+   # Or use the Jupyter notebook
+   jupyter notebook train.ipynb
+   ```
+
+7. **Run the application**
    ```bash
    python app.py
    ```
 
-6. **Open your browser**
+8. **Open your browser**
    Navigate to `http://localhost:5000`
 
 ## 📁 Project Structure
@@ -89,30 +121,53 @@ LeafSense/
 
 ## 🧠 Model Training
 
-### Dataset Preparation
+### Automatic Dataset Download
 
-1. **Download PlantVillage Dataset**
-   - Available on [Kaggle](https://www.kaggle.com/datasets/abdallahalidev/plantvillage-dataset)
-   - Or use the public repository version
+The training script automatically downloads the PlantVillage dataset from Kaggle:
 
-2. **Organize Dataset**
+**Dataset Information:**
+- **Name**: New Plant Diseases Dataset (Augmented)
+- **Source**: [Kaggle Dataset](https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset)
+- **Size**: ~2 GB
+- **Images**: 87,000+ augmented images
+- **Classes**: 38 plant disease categories
+
+### Training Process
+
+1. **Automatic Download** (first run only)
+   ```bash
+   python train.py
+   # or
+   jupyter notebook train.ipynb
+   ```
+   
+   The script will:
+   - ✅ Check for Kaggle credentials
+   - ✅ Download dataset if not present (~2 GB)
+   - ✅ Extract and organize files automatically
+   - ✅ Start training process
+
+2. **Dataset Structure** (created automatically)
    ```
    data/
-   ├── train/
+   ├── train/       # Training images (70,000+)
    │   ├── Tomato___Late_blight/
    │   ├── Tomato___Early_blight/
-   │   └── ... (other classes)
-   ├── val/
-   └── test/
+   │   └── ... (38 classes total)
+   └── val/         # Validation images (17,000+)
+       ├── Tomato___Late_blight/
+       └── ...
    ```
 
-3. **Run Training**
-   ```bash
-   # Using Python script
-   python train.py
-   
-   # Or using Jupyter notebook
-   jupyter notebook train.ipynb
+3. **Training Configuration**
+   ```python
+   # Key hyperparameters
+   Image Size: 224×224
+   Batch Size: 16-32 (GPU optimized)
+   Epochs: 50 (with early stopping)
+   Learning Rate: 1e-4 (initial), 2e-5 (fine-tune)
+   Optimizer: Adam
+   Loss: Categorical Crossentropy
    ```
 
 ### Model Architecture

@@ -81,21 +81,13 @@ venv.bak/
 # dotenv environment variables
 .env
 
+# Kaggle API credentials (IMPORTANT - DO NOT COMMIT)
+.kaggle/
+kaggle.json
+**/kaggle.json
 
-# Gunicorn log files
-gunicorn.log
-
-# Model artifacts
-*.h5
-*.hdf5
-*.pb
-*.ckpt
-*.tflite
-*.keras
-saved_models/
-checkpoints/
-
-# Data
+# Downloaded datasets
+kaggle_data/
 data/
 *.csv
 *.tsv
