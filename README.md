@@ -11,7 +11,7 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
 
 ## 🌟 Features
 
-- **AI-Powered Detection**: ResNet50-based deep learning model trained on PlantVillage dataset
+- **AI-Powered Detection**: EfficientNetB4-based deep learning model with transfer learning
 - **Multi-API Integration**: Combines local model predictions with PlantVillage API
 - **AI Enhancement**: Uses Gemini API to generate farmer-friendly explanations
 - **Modern Web Interface**: Responsive, mobile-friendly web UI built with Bootstrap
@@ -19,6 +19,7 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
 - **Real-time Processing**: Fast prediction pipeline (≤8 seconds)
 - **Scalable Architecture**: Supports multiple concurrent users
 - **GPU Support**: Optimized for CUDA 13 and cuDNN 9
+- **Simple Training**: Ultra-simplified 3-step training process
 
 ## 🚀 Quick Start
 
@@ -80,21 +81,23 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
    SECRET_KEY=your_secret_key_here
    ```
 
-6. **Train the model (downloads dataset automatically)**
+6. **Prepare your dataset**
+   - Organize images in folders by disease class
+   - Expected structure: `data/Disease_Name/images.jpg`
+   - Or download PlantVillage dataset manually from Kaggle
+
+7. **Train the model**
    ```bash
-   # The script will automatically download the dataset from Kaggle
    python train.py
-   
-   # Or use the Jupyter notebook
-   jupyter notebook train.ipynb
+   # Default: loads from 'data/', trains 10 epochs, saves to 'saved_models/'
    ```
 
-7. **Run the application**
+8. **Run the application**
    ```bash
    python app.py
    ```
 
-8. **Open your browser**
+9. **Open your browser**
    Navigate to `http://localhost:5000`
 
 ## 📁 Project Structure
@@ -102,15 +105,16 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
 ```
 LeafSense/
 ├── app.py                 # Main Flask application
-├── train.py              # Model training script
-├── train.ipynb           # Jupyter notebook for training
+├── train.py              # Simplified model training script (80 lines)
 ├── requirements.txt      # Python dependencies
 ├── diseases.json         # Knowledge base of diseases
-├── data/                 # Dataset directory
-│   ├── train/           # Training images (70%)
-│   ├── val/             # Validation images (15%)
-│   └── test/            # Test images (15%)
+├── data/                 # Dataset directory (organized by class)
+│   ├── Disease_Class_1/
+│   ├── Disease_Class_2/
+│   └── ... (auto-split 80/20 train/val)
 ├── saved_models/         # Trained models and artifacts
+│   ├── best_model.keras # Trained model
+│   └── class_indices.json # Class mappings
 ├── static/               # Static files (CSS, JS, images)
 │   ├── css/
 │   ├── js/
@@ -121,63 +125,65 @@ LeafSense/
 
 ## 🧠 Model Training
 
-### Automatic Dataset Download
+### Dataset Setup
 
-The training script automatically downloads the PlantVillage dataset from Kaggle:
+**Option 1: Use Your Own Data**
 
-**Dataset Information:**
-- **Name**: New Plant Diseases Dataset (Augmented)
+Organize images in folders by disease class:
+```
+data/
+├── Tomato_Late_Blight/
+│   ├── image1.jpg
+│   ├── image2.jpg
+│   └── ...
+├── Tomato_Early_Blight/
+│   └── ...
+└── Potato_Healthy/
+    └── ...
+```
+
+**Option 2: Download PlantVillage Dataset**
+
 - **Source**: [Kaggle Dataset](https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset)
 - **Size**: ~2 GB
 - **Images**: 87,000+ augmented images
 - **Classes**: 38 plant disease categories
 
-### Training Process
+### Training Process (3 Simple Steps)
 
-1. **Automatic Download** (first run only)
+1. **Run the training script**
    ```bash
    python train.py
-   # or
-   jupyter notebook train.ipynb
-   ```
-   
-   The script will:
-   - ✅ Check for Kaggle credentials
-   - ✅ Download dataset if not present (~2 GB)
-   - ✅ Extract and organize files automatically
-   - ✅ Start training process
-
-2. **Dataset Structure** (created automatically)
-   ```
-   data/
-   ├── train/       # Training images (70,000+)
-   │   ├── Tomato___Late_blight/
-   │   ├── Tomato___Early_blight/
-   │   └── ... (38 classes total)
-   └── val/         # Validation images (17,000+)
-       ├── Tomato___Late_blight/
-       └── ...
    ```
 
-3. **Training Configuration**
+2. **What happens:**
+   - ✅ Loads images from `data/` folder
+   - ✅ Automatically splits 80/20 train/validation
+   - ✅ Builds EfficientNetB4 model with transfer learning
+   - ✅ Trains for 10 epochs (customizable)
+   - ✅ Saves model to `saved_models/best_model.keras`
+   - ✅ Saves class mapping to `saved_models/class_indices.json`
+
+3. **Customize (optional)**
+   Edit the bottom of `train.py`:
    ```python
-   # Key hyperparameters
-   Image Size: 224×224
-   Batch Size: 16-32 (GPU optimized)
-   Epochs: 50 (with early stopping)
-   Learning Rate: 1e-4 (initial), 2e-5 (fine-tune)
-   Optimizer: Adam
-   Loss: Categorical Crossentropy
+   train_and_save(
+       data_dir='data',           # Your data folder
+       epochs=20,                 # More training
+       output_dir='saved_models'  # Output location
+   )
    ```
 
 ### Model Architecture
 
-- **Base Model**: ResNet50 pre-trained on ImageNet
-- **Custom Head**: Dense(512, ReLU) + Dropout(0.3) + Dense(38, Softmax)
-- **Training**: Transfer learning with frozen base layers
-- **Optimizer**: Adam (lr=0.0001)
-- **Loss**: Categorical crossentropy
-- **Augmentation**: Rotation, flips, zoom, brightness/contrast
+- **Base Model**: EfficientNetB4 pre-trained on ImageNet (frozen)
+- **Custom Head**: GlobalAvgPool → Dropout(0.3) → Dense(256, ReLU) → Dense(num_classes, Softmax)
+- **Training**: Transfer learning - only custom head is trained
+- **Optimizer**: Adam
+- **Loss**: Sparse categorical crossentropy
+- **Image Size**: 224×224
+- **Batch Size**: 32
+- **Normalization**: Pixels scaled to 0-1 range
 
 ## 🔌 API Endpoints
 
@@ -238,12 +244,14 @@ Health check endpoint.
 | `FLASK_ENV` | Flask environment | development |
 | `MAX_FILE_SIZE` | Maximum upload size | 10MB |
 
-### Model Configuration
+### Training Configuration
 
 - **Image Size**: 224x224 pixels
-- **Batch Size**: 32
-- **Epochs**: 20-30 (with early stopping)
-- **Target Accuracy**: ≥90%
+- **Batch Size**: 32 (adjustable)
+- **Epochs**: 10 (default, customizable)
+- **Validation Split**: 20% automatic
+- **Expected Accuracy**: 85-90%
+- **Training Time**: 2-3 min/epoch (GPU), 20-30 min/epoch (CPU)
 
 ## 📊 Performance
 

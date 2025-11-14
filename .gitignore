@@ -1,123 +1,47 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+.Python
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-pytestdebug.log
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# VS Code
-.vscode/
-
-# Local environments
-env/
+# Virtual Environment
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
+env/
 
-# MacOS
-.DS_Store
-
-# dotenv environment variables
+# Environment Variables
 .env
-
-# Kaggle API credentials (IMPORTANT - DO NOT COMMIT)
-.kaggle/
-kaggle.json
-**/kaggle.json
-
-# Downloaded datasets
-kaggle_data/
-data/
-*.csv
-*.tsv
-*.xlsx
-*.xls
+.env.local
+.env.*.local
 
 # Logs
-logs/
 *.log
+logs/
 
-# Images and outputs
-*.png
-*.jpg
-*.jpeg
-*.bmp
-*.gif
-*.svg
+# Uploaded Images
+static/images/*.jpg
+static/images/*.jpeg
+static/images/*.png
 
-# Temporary files
+# Dataset (too large for git)
+data/
+
+# Model Files (too large for git - use Git LFS or download separately)
+saved_models/*.keras
+saved_models/*.h5
+
+# Temp Files
 *.tmp
-*.temp
 *.bak
 *.swp
-*.swo
 
-# System files
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
 Thumbs.db
-ehthumbs.db
 Desktop.ini
-.venv
-.bat
-.ps1
-*test.py
