@@ -30,6 +30,8 @@ data/
 # Model Files (too large for git - use Git LFS or download separately)
 saved_models/*.keras
 saved_models/*.h5
+models/*.keras
+models/*.h5
 
 # Temp Files
 *.tmp
