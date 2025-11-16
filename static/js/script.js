@@ -100,12 +100,15 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Model prediction
         if (data.model_prediction) {
+            const pred = data.model_prediction;
             resultsHTML += `
                 <div class="mb-3">
                     <h6 class="text-primary"><i class="fas fa-brain me-2"></i>AI Model Prediction:</h6>
                     <div class="alert alert-info">
-                        <strong>Disease:</strong> ${formatDiseaseName(data.model_prediction.disease)}<br>
-                        <strong>Confidence:</strong> ${(data.model_prediction.confidence * 100).toFixed(1)}%
+                        <strong>Disease:</strong> ${formatDiseaseName(pred.disease)}<br>
+                        <strong>Confidence:</strong> ${(pred.confidence * 100).toFixed(1)}%
+                        ${pred.cause ? `<br><strong>Cause:</strong> ${pred.cause}` : ''}
+                        ${pred.cure ? `<br><strong>Treatment:</strong> ${pred.cure}` : ''}
                     </div>
                 </div>
             `;

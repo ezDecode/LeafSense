@@ -1,143 +1,117 @@
-"""LeafSense - Plant Disease Detection"""
-import os
-import json
-from pathlib import Path
-from flask import Flask, request, jsonify, render_template, send_from_directory
-from werkzeug.utils import secure_filename
+from flask import Flask, render_template,request,redirect,send_from_directory,url_for,jsonify
 import numpy as np
-from PIL import Image
+import json
+import uuid
 import tensorflow as tf
-
-# Suppress warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.get_logger().setLevel('ERROR')
+from datetime import datetime
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
-app.config['UPLOAD_FOLDER'] = 'static/images'
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
+model = tf.keras.models.load_model("models/plant_disease.keras")
+label = ['Apple___Apple_scab',
+ 'Apple___Black_rot',
+ 'Apple___Cedar_apple_rust',
+ 'Apple___healthy',
+ 'Background_without_leaves',
+ 'Blueberry___healthy',
+ 'Cherry___Powdery_mildew',
+ 'Cherry___healthy',
+ 'Corn___Cercospora_leaf_spot Gray_leaf_spot',
+ 'Corn___Common_rust',
+ 'Corn___Northern_Leaf_Blight',
+ 'Corn___healthy',
+ 'Grape___Black_rot',
+ 'Grape___Esca_(Black_Measles)',
+ 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+ 'Grape___healthy',
+ 'Orange___Haunglongbing_(Citrus_greening)',
+ 'Peach___Bacterial_spot',
+ 'Peach___healthy',
+ 'Pepper,_bell___Bacterial_spot',
+ 'Pepper,_bell___healthy',
+ 'Potato___Early_blight',
+ 'Potato___Late_blight',
+ 'Potato___healthy',
+ 'Raspberry___healthy',
+ 'Soybean___healthy',
+ 'Squash___Powdery_mildew',
+ 'Strawberry___Leaf_scorch',
+ 'Strawberry___healthy',
+ 'Tomato___Bacterial_spot',
+ 'Tomato___Early_blight',
+ 'Tomato___Late_blight',
+ 'Tomato___Leaf_Mold',
+ 'Tomato___Septoria_leaf_spot',
+ 'Tomato___Spider_mites Two-spotted_spider_mite',
+ 'Tomato___Target_Spot',
+ 'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
+ 'Tomato___Tomato_mosaic_virus',
+ 'Tomato___healthy']
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+with open("plant_disease.json",'r') as file:
+    plant_disease = json.load(file)
 
-def load_knowledge_base():
-    """Load disease information from JSON"""
-    try:
-        with open('diseases.json', 'r') as f:
-            return json.load(f)
-    except:
-        return {}
+# print(plant_disease[4])
 
-def load_model():
-    """Load trained model"""
-    try:
-        # Configure GPU memory growth
-        gpus = tf.config.list_physical_devices('GPU')
-        if gpus:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-        
-        # Try loading model
-        for path in ['saved_models/best_model.keras', 'saved_models/best_model.h5']:
-            if Path(path).exists():
-                return tf.keras.models.load_model(path)
-        return None
-    except:
-        return None
-
-def load_class_mapping():
-    """Load class index to name mapping"""
-    try:
-        with open('saved_models/class_indices.json', 'r') as f:
-            return json.load(f)
-    except:
-        return {}
-
-# Initialize global variables
-model = load_model()
-class_mapping = load_class_mapping()
-knowledge_base = load_knowledge_base()
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def preprocess_image(image_path):
-    """Preprocess image for model input"""
-    try:
-        img = Image.open(image_path).convert('RGB')
-        img = img.resize((224, 224))
-        img_array = np.array(img, dtype=np.float32) / 255.0
-        return np.expand_dims(img_array, axis=0)
-    except:
-        return None
-
-def predict(image_array):
-    """Make prediction using loaded model"""
-    if model is None:
-        return None
-    try:
-        predictions = model.predict(image_array, verbose=0)
-        predicted_class = int(np.argmax(predictions[0]))
-        confidence = float(predictions[0][predicted_class])
-        disease = class_mapping.get(str(predicted_class), f"Unknown_{predicted_class}")
-        return {"disease": disease, "confidence": confidence}
-    except:
-        return None
-
-
-
-@app.route('/')
-def home():
+@app.route('/',methods = ['GET'])
+def index():
     return render_template('index.html')
 
+def extract_features(image):
+    image = tf.keras.utils.load_img(image,target_size=(160,160))
+    feature = tf.keras.utils.img_to_array(image)
+    feature = np.array([feature])
+    return feature
+
+def model_predict(image):
+    img = extract_features(image)
+    prediction = model.predict(img)
+    # print(prediction)
+    prediction_label = plant_disease[prediction.argmax()]
+    return prediction_label
+
 @app.route('/predict', methods=['POST'])
-def predict_endpoint():
-    """Handle image upload and prediction"""
+def predict():
     try:
         if 'image' not in request.files:
-            return jsonify({'error': 'No image provided'}), 400
+            return jsonify({'error': 'No image file provided'}), 400
         
-        file = request.files['image']
-        if not file.filename or not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type'}), 400
+        image = request.files['image']
         
-        # Save image
-        filename = secure_filename(file.filename)
-        filepath = Path(app.config['UPLOAD_FOLDER']) / filename
-        file.save(filepath)
+        if image.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
         
-        # Preprocess and predict
-        image_array = preprocess_image(filepath)
-        if image_array is None:
-            return jsonify({'error': 'Image processing failed'}), 500
+        # Generate unique filename
+        temp_name = f"temp_{uuid.uuid4().hex}"
+        filepath = f"static/images/{temp_name}_{image.filename}"
+        image.save(filepath)
         
-        prediction = predict(image_array)
-        if prediction is None:
-            return jsonify({'error': 'Prediction failed'}), 500
+        # Get prediction
+        img = extract_features(f'./{filepath}')
+        prediction = model.predict(img)
+        predicted_class_index = prediction.argmax()
+        confidence = float(prediction.max())
         
-        # Get disease info
-        disease_name = prediction['disease']
-        disease_info = knowledge_base.get(disease_name, {})
+        # Get disease information from plant_disease.json
+        disease_info = plant_disease[predicted_class_index]
         
-        return jsonify({
-            'disease': disease_name,
-            'confidence': prediction['confidence'],
-            'description': disease_info.get('description', 'No information available'),
-            'remedy': disease_info.get('remedy', 'Consult agricultural expert'),
-            'prevention': disease_info.get('prevention', 'Follow good practices'),
-            'uploaded_image': filename
-        })
-    except:
-        return jsonify({'error': 'Server error'}), 500
-
-@app.route('/static/images/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy', 'model_loaded': model is not None})
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+        # Prepare response
+        response = {
+            'uploaded_image': f"{temp_name}_{image.filename}",
+            'model_prediction': {
+                'disease': disease_info['name'],
+                'confidence': confidence,
+                'cause': disease_info['cause'],
+                'cure': disease_info['cure']
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        print(f"Error in /predict: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+        
+    
+if __name__ == "__main__":
+    app.run(debug=True)
