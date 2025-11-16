@@ -51,7 +51,20 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
    pip install -r requirements.txt
    ```
 
-4. **Set up Kaggle API (for dataset download)**
+4. **Download the pre-trained model**
+   
+   The trained model file (`plant_disease.keras`) is not included in the repository due to its size (203 MB).
+   
+   **Option A: Download from Google Drive**
+   - Download the model from: [Google Drive Link](https://drive.google.com/your-link-here)
+   - Place it in the `models/` directory
+   - File path should be: `models/plant_disease.keras`
+   
+   **Option B: Train your own model**
+   - Follow the training instructions in the [Model Training](#-model-training) section below
+   - The training script will save the model to `models/plant_disease.keras`
+
+5. **Set up Kaggle API (for dataset download)**
    
    a. Create a free account at [kaggle.com](https://www.kaggle.com/)
    
@@ -70,34 +83,34 @@ LeafSense is a full-stack AI system that detects crop leaf diseases using deep l
    chmod 600 ~/.kaggle/kaggle.json
    ```
 
-5. **Set up environment variables**
+6. **Set up environment variables (optional - for API integrations)**
    ```bash
-   # Copy the example environment file
+   # Copy the example environment file (if exists)
    cp .env.example .env
    
-   # Edit .env with your API keys
-   GEMINI_API_KEY=your_actual_gemini_api_key
-   PLANTVILLAGE_API_KEY=your_actual_plantvillage_api_key
+   # Edit .env with your API keys (optional for basic usage)
+   GEMINI_API_KEY=your_actual_gemini_api_key  # Optional
+   PLANTVILLAGE_API_KEY=your_actual_plantvillage_api_key  # Optional
    SECRET_KEY=your_secret_key_here
    ```
 
-6. **Prepare your dataset**
+7. **Prepare your dataset (if training)**
    - Organize images in folders by disease class
    - Expected structure: `data/Disease_Name/images.jpg`
    - Or download PlantVillage dataset manually from Kaggle
 
-7. **Train the model**
+8. **Train the model (optional - skip if using pre-trained model)**
    ```bash
    python train.py
-   # Default: loads from 'data/', trains 10 epochs, saves to 'saved_models/'
+   # Default: loads from 'data/', trains 10 epochs, saves to 'models/'
    ```
 
-8. **Run the application**
+9. **Run the application**
    ```bash
    python app.py
    ```
 
-9. **Open your browser**
+10. **Open your browser**
    Navigate to `http://localhost:5000`
 
 ## 📁 Project Structure
@@ -107,14 +120,13 @@ LeafSense/
 ├── app.py                 # Main Flask application
 ├── train.py              # Simplified model training script (80 lines)
 ├── requirements.txt      # Python dependencies
-├── diseases.json         # Knowledge base of diseases
+├── plant_disease.json    # Knowledge base of diseases
 ├── data/                 # Dataset directory (organized by class)
 │   ├── Disease_Class_1/
 │   ├── Disease_Class_2/
 │   └── ... (auto-split 80/20 train/val)
-├── saved_models/         # Trained models and artifacts
-│   ├── best_model.keras # Trained model
-│   └── class_indices.json # Class mappings
+├── models/               # Trained models (excluded from Git - too large)
+│   └── plant_disease.keras # Main model (download separately)
 ├── static/               # Static files (CSS, JS, images)
 │   ├── css/
 │   ├── js/
